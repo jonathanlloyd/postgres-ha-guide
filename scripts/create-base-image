@@ -1,0 +1,21 @@
+#!/bin/bash
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+lxc delete ssh-base --force 2>/dev/null || true
+lxc launch ubuntu:20.04 ssh-base
+lxc exec ssh-base -- bash -c "
+	sleep 5
+	apt-get update
+	apt-get install openssh-server -y
+	useradd -m -s /bin/bash $USER
+	usermod -aG sudo $USER
+	echo \"$USER ALL=(ALL) NOPASSWD: ALL\" >> /etc/sudoers
+	mkdir -p /home/$USER/.ssh
+	echo \"$(cat ~/.ssh/id_ed25519.pub)\" >> /home/$USER/.ssh/authorized_keys
+"
+lxc stop ssh-base
+lxc image delete ssh-base || true
+lxc publish ssh-base --alias=ssh-base
+lxc delete ssh-base

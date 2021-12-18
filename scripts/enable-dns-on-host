@@ -1,0 +1,8 @@
+#!/bin/bash
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+LXD_DNS_IP=$(lxc network get lxdbr0 ipv4.address | cut -d '/' -f1)
+resolvectl dns lxdbr0 $LXD_DNS_IP
+resolvectl domain lxdbr0 '~lxd'
