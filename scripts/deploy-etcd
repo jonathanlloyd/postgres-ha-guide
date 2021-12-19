@@ -1,0 +1,55 @@
+#!/bin/bash
+
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+TARGET_HOSTNAME=$1
+
+DATA0_IP=$(lxc list -c4 --format csv data0 | cut -d' ' -f1)
+DATA1_IP=$(lxc list -c4 --format csv data1 | cut -d' ' -f1)
+DATA2_IP=$(lxc list -c4 --format csv data2 | cut -d' ' -f1)
+
+case $TARGET_HOSTNAME in
+
+  "data0.lxd")
+    TARGET_IP=$DATA0_IP
+    ;;
+
+  "data1.lxd")
+    TARGET_IP=$DATA1_IP
+    ;;
+
+  "data2.lxd")
+    TARGET_IP=$DATA2_IP
+    ;;
+
+esac
+
+PEER_LIST="data0.lxd=http://data0.lxd:2380,data1.lxd=http://data1.lxd:2380,data2.lxd=http://data2.lxd:2380"
+
+cat ./config/etcd/etcd.service \
+	| sed "s/SELF_NAME/$TARGET_HOSTNAME/" \
+	| sed "s/SELF_IP/$TARGET_IP/" \
+	| sed "s#PEER_LIST#$PEER_LIST#" \
+	| ssh $TARGET_HOSTNAME 'cat - >$HOME/etcd.service'
+
+## Install etcd
+ssh -t $TARGET_HOSTNAME '
+	ETCD_VER=v3.5.1
+	DOWNLOAD_URL='https://github.com/etcd-io/etcd/releases/download'
+
+	mkdir -p /tmp/etcd-download-test
+
+	curl -L ${DOWNLOAD_URL}/${ETCD_VER}/etcd-${ETCD_VER}-linux-amd64.tar.gz -o /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+	tar xzvf /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz -C /tmp/etcd-download-test --strip-components=1
+	rm -f /tmp/etcd-${ETCD_VER}-linux-amd64.tar.gz
+
+	sudo cp /tmp/etcd-download-test/etcd /usr/local/bin
+	sudo cp /tmp/etcd-download-test/etcdctl /usr/local/bin
+	sudo cp /tmp/etcd-download-test/etcdutl /usr/local/bin
+
+	sudo mv ./etcd.service /etc/systemd/system/
+	sudo systemctl daemon-reload
+	sudo systemctl enable etcd
+	sudo systemctl start etcd
+'
